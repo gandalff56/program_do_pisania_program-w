@@ -91,7 +91,13 @@ func showCreateForm(shapeType string) {
 	form.AddInputField("Drawing", "MONOPILE_PARTS_A", 30, nil, nil)
 	form.AddInputField("Part", "", 30, nil, nil)
 	form.AddInputField("Length [mm]", "", 20, nil, nil)
-	form.AddInputField("Width [mm]", "", 20, nil, nil)
+	if shapeType == "CONE" {
+		form.AddInputField("Width [mm]", "", 20, nil, nil).
+			GetFormItemByLabel("Width [mm]").(*tview.InputField).
+			SetPlaceholder("auto if empty")
+	} else {
+		form.AddInputField("Width [mm]", "", 20, nil, nil)
+	}
 	form.AddInputField("Thickness [mm]", "80.0", 20, nil, nil)
 	form.AddInputField("Material Code", "S355ML", 20, nil, nil)
 	form.AddInputField("Working Area", "A", 10, nil, nil)
@@ -142,19 +148,28 @@ func handleCreate(form *tview.Form, shapeType string) {
 		showError("Invalid Length value")
 		return
 	}
-	params.Width, err = parseFloat(form, "Width [mm]")
-	if err != nil {
-		showError("Invalid Width value")
-		return
-	}
 	params.Thickness, err = parseFloat(form, "Thickness [mm]")
 	if err != nil {
 		showError("Invalid Thickness value")
 		return
 	}
 
-	if params.Length <= 0 || params.Width <= 0 || params.Thickness <= 0 {
-		showError("Length, Width and Thickness must be > 0")
+	// Width: required for CAN, optional for CONE (auto-calculated if empty)
+	widthText := form.GetFormItemByLabel("Width [mm]").(*tview.InputField).GetText()
+	if widthText != "" {
+		params.Width, err = strconv.ParseFloat(strings.TrimSpace(widthText), 64)
+		if err != nil {
+			showError("Invalid Width value")
+			return
+		}
+	}
+
+	if params.Length <= 0 || params.Thickness <= 0 {
+		showError("Length and Thickness must be > 0")
+		return
+	}
+	if shapeType == "CAN" && params.Width <= 0 {
+		showError("Width is required for CAN")
 		return
 	}
 	if params.Part == "" {
@@ -182,6 +197,11 @@ func handleCreate(form *tview.Form, shapeType string) {
 		if err != nil || params.TopRadius <= 0 {
 			showError("Invalid Top Radius value")
 			return
+		}
+
+		// Auto-calculate Width if left empty
+		if params.Width <= 0 {
+			params.Width = autoCalcBoundingWidth(params.PieceHeight, params.Length, params.TopRadius)
 		}
 		if params.PieceHeight > params.Width {
 			showError("Piece Height cannot be greater than Width")

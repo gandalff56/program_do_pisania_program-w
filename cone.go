@@ -326,3 +326,14 @@ func circularSegmentArea(chord, radius float64) float64 {
 	area := radius*radius*math.Acos((radius-h)/radius) - (radius-h)*math.Sqrt(2*radius*h-h*h)
 	return area
 }
+
+// autoCalcBoundingWidth computes the bounding box height for a CONE from pieceHeight, chord and top radius.
+// Width = pieceHeight + top_arc_sagitta
+func autoCalcBoundingWidth(pieceHeight, chordTop, topRadius float64) float64 {
+	halfChord := chordTop / 2.0
+	if topRadius <= 0 || halfChord >= topRadius {
+		return pieceHeight
+	}
+	topSagitta := topRadius - math.Sqrt(topRadius*topRadius-halfChord*halfChord)
+	return pieceHeight + topSagitta
+}
