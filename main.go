@@ -2,163 +2,252 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
+)
+
+var (
+	app   *tview.Application
+	pages *tview.Pages
 )
 
 func main() {
-	initScanner()
+	app = tview.NewApplication()
+	pages = tview.NewPages()
 
-	fmt.Println("========================================")
-	fmt.Println("  POLARIS Program Generator v1.0")
-	fmt.Println("========================================")
-	fmt.Println()
-	fmt.Println("  1. Stworz nowy program")
-	fmt.Println("  2. Zaladuj istniejacy program (dewiacja)")
-	fmt.Println("  0. Wyjscie")
-	fmt.Println()
+	showMainMenu()
 
-	choice := promptString("Wybierz opcje", "")
+	pages.SetBackgroundColor(tcell.ColorDefault)
 
-	switch choice {
-	case "1":
-		handleCreateNew()
-	case "2":
-		handleLoadDeviation()
-	case "0":
-		fmt.Println("Do widzenia!")
-		os.Exit(0)
-	default:
-		fmt.Println("Nieprawidlowy wybor.")
-		os.Exit(1)
+	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
+		fmt.Printf("Error: %v\n", err)
 	}
 }
 
-func handleCreateNew() {
-	fmt.Println()
-	fmt.Println("--- Tworzenie nowego programu ---")
-	fmt.Println()
-	fmt.Println("  Typ ksztaltu:")
-	fmt.Println("  1. CAN  (prosta plyta prostokatna)")
-	fmt.Println("  2. CONE (plyta w ksztalcie banana)")
-	fmt.Println()
+// ==================== MAIN MENU ====================
 
-	shapeChoice := promptString("Wybierz typ", "")
+func showMainMenu() {
+	list := tview.NewList().
+		AddItem("Stworz nowy program", "Utworz nowy program CAN lub CONE", '1', func() {
+			showShapeSelection()
+		}).
+		AddItem("Zaladuj program (dewiacja)", "Zaladuj istniejacy program i zmien wymiary", '2', func() {
+			showLoadFileSelection()
+		}).
+		AddItem("Wyjscie", "Zamknij program", '0', func() {
+			app.Stop()
+		})
 
-	params := ShapeParams{}
+	list.SetBorder(true).
+		SetTitle(" POLARIS Program Generator v1.0 ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorDodgerBlue)
 
-	switch shapeChoice {
-	case "1":
-		params.ShapeType = "CAN"
-	case "2":
-		params.ShapeType = "CONE"
-	default:
-		fmt.Println("Nieprawidlowy wybor typu.")
-		os.Exit(1)
+	frame := centerWidget(list, 60, 11)
+	pages.AddAndSwitchToPage("main", frame, true)
+}
+
+// ==================== SHAPE SELECTION ====================
+
+func showShapeSelection() {
+	list := tview.NewList().
+		AddItem("CAN", "Prosta plyta prostokatna", '1', func() {
+			showCreateForm("CAN")
+		}).
+		AddItem("CONE", "Plyta w ksztalcie banana", '2', func() {
+			showCreateForm("CONE")
+		}).
+		AddItem("Powrot", "Wroc do menu glownego", '0', func() {
+			pages.SwitchToPage("main")
+		})
+
+	list.SetBorder(true).
+		SetTitle(" Wybierz typ ksztaltu ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorGreen)
+
+	frame := centerWidget(list, 50, 11)
+	pages.AddAndSwitchToPage("shape", frame, true)
+}
+
+// ==================== CREATE FORM ====================
+
+func showCreateForm(shapeType string) {
+	form := tview.NewForm()
+
+	// Common fields
+	form.AddInputField("Contract", "B2149", 30, nil, nil)
+	form.AddInputField("Project", "B2149", 30, nil, nil)
+	form.AddInputField("Drawing", "MONOPILE_PARTS_A", 30, nil, nil)
+	form.AddInputField("Part", "", 30, nil, nil)
+	form.AddInputField("Length [mm]", "", 20, nil, nil)
+	form.AddInputField("Width [mm]", "", 20, nil, nil)
+	form.AddInputField("Thickness [mm]", "80.0", 20, nil, nil)
+	form.AddInputField("Material Code", "S355ML", 20, nil, nil)
+	form.AddInputField("Working Area", "A", 10, nil, nil)
+
+	// CONE-specific fields
+	if shapeType == "CONE" {
+		form.AddInputField("Piece Height [mm]", "", 20, nil, nil)
+		form.AddInputField("Left Offset [mm]", "", 20, nil, nil)
+		form.AddInputField("Bottom Radius [mm]", "", 20, nil, nil)
+		form.AddInputField("Top Radius [mm]", "", 20, nil, nil)
 	}
 
-	fmt.Println()
-	fmt.Println("--- Parametry podstawowe ---")
-	params.Contract = promptString("Contract (np. B2149)", "")
-	params.Project = promptString("Project", params.Contract)
-	params.Drawing = promptString("Drawing (np. MONOPILE_PARTS_A)", "")
-	params.Part = promptString("Part (np. POS_296_R01)", "")
-	params.Length = promptFloat("Length [mm]", 0)
-	params.Width = promptFloat("Width [mm]", 0)
-	params.Thickness = promptFloat("Thickness [mm]", 80.0)
-	params.MaterialCode = promptString("Material Code", "S355ML")
-	params.WorkingArea = promptString("Working Area", "A")
+	form.AddButton("Generuj", func() {
+		handleCreate(form, shapeType)
+	})
+	form.AddButton("Anuluj", func() {
+		pages.SwitchToPage("shape")
+	})
+
+	title := fmt.Sprintf(" Nowy program %s ", shapeType)
+	form.SetBorder(true).
+		SetTitle(title).
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorGreen)
+
+	height := 27
+	if shapeType == "CONE" {
+		height = 35
+	}
+	frame := centerWidget(form, 65, height)
+	pages.AddAndSwitchToPage("create", frame, true)
+}
+
+func handleCreate(form *tview.Form, shapeType string) {
+	params := ShapeParams{
+		ShapeType:    shapeType,
+		Contract:     form.GetFormItemByLabel("Contract").(*tview.InputField).GetText(),
+		Project:      form.GetFormItemByLabel("Project").(*tview.InputField).GetText(),
+		Drawing:      form.GetFormItemByLabel("Drawing").(*tview.InputField).GetText(),
+		Part:         form.GetFormItemByLabel("Part").(*tview.InputField).GetText(),
+		MaterialCode: form.GetFormItemByLabel("Material Code").(*tview.InputField).GetText(),
+		WorkingArea:  form.GetFormItemByLabel("Working Area").(*tview.InputField).GetText(),
+	}
+
+	var err error
+	params.Length, err = parseFloat(form, "Length [mm]")
+	if err != nil {
+		showError("Nieprawidlowa wartosc Length")
+		return
+	}
+	params.Width, err = parseFloat(form, "Width [mm]")
+	if err != nil {
+		showError("Nieprawidlowa wartosc Width")
+		return
+	}
+	params.Thickness, err = parseFloat(form, "Thickness [mm]")
+	if err != nil {
+		showError("Nieprawidlowa wartosc Thickness")
+		return
+	}
 
 	if params.Length <= 0 || params.Width <= 0 || params.Thickness <= 0 {
-		fmt.Println("Blad: Length, Width i Thickness musza byc wieksze od 0.")
-		os.Exit(1)
+		showError("Length, Width i Thickness musza byc > 0")
+		return
+	}
+	if params.Part == "" {
+		showError("Part nie moze byc pusty")
+		return
 	}
 
-	if params.ShapeType == "CONE" {
-		fmt.Println()
-		fmt.Println("--- Parametry CONE (banan) ---")
-		params.PieceHeight = promptFloat("Piece Height [mm] (wysokosc ksztaltu)", 0)
-		params.LeftOffset = promptFloat("Left Offset [mm] (przesuniecie lewej krawedzi)", 0)
-		params.BottomRadius = promptFloat("Bottom Radius [mm] (promien dolnego luku)", 0)
-		params.TopRadius = promptFloat("Top Radius [mm] (promien gornego luku)", 0)
-
-		if params.PieceHeight <= 0 || params.LeftOffset < 0 || params.BottomRadius <= 0 || params.TopRadius <= 0 {
-			fmt.Println("Blad: Nieprawidlowe parametry CONE.")
-			os.Exit(1)
+	if shapeType == "CONE" {
+		params.PieceHeight, err = parseFloat(form, "Piece Height [mm]")
+		if err != nil || params.PieceHeight <= 0 {
+			showError("Nieprawidlowa wartosc Piece Height")
+			return
+		}
+		params.LeftOffset, err = parseFloat(form, "Left Offset [mm]")
+		if err != nil || params.LeftOffset < 0 {
+			showError("Nieprawidlowa wartosc Left Offset")
+			return
+		}
+		params.BottomRadius, err = parseFloat(form, "Bottom Radius [mm]")
+		if err != nil || params.BottomRadius <= 0 {
+			showError("Nieprawidlowa wartosc Bottom Radius")
+			return
+		}
+		params.TopRadius, err = parseFloat(form, "Top Radius [mm]")
+		if err != nil || params.TopRadius <= 0 {
+			showError("Nieprawidlowa wartosc Top Radius")
+			return
 		}
 		if params.PieceHeight > params.Width {
-			fmt.Println("Blad: PieceHeight nie moze byc wiekszy niz Width (wysokosc plyty).")
-			os.Exit(1)
+			showError("Piece Height nie moze byc wiekszy niz Width")
+			return
 		}
 	}
 
-	// Generate
 	var doc *PolarisDocument
 	var fileName string
 
-	if params.ShapeType == "CAN" {
+	if shapeType == "CAN" {
 		doc, fileName = GenerateCAN(params)
 	} else {
 		doc, fileName = GenerateCONE(params)
 	}
 
-	// Save
 	if err := WritePolarisFile(fileName, doc); err != nil {
-		fmt.Printf("Blad zapisu: %v\n", err)
-		os.Exit(1)
+		showError(fmt.Sprintf("Blad zapisu: %v", err))
+		return
 	}
 
-	fmt.Println()
-	fmt.Println("========================================")
-	fmt.Printf("  Program zapisany: %s\n", fileName)
-	fmt.Println("========================================")
+	showSuccess(fmt.Sprintf("Program zapisany:\n\n[yellow]%s", fileName))
 }
 
-func handleLoadDeviation() {
-	fmt.Println()
-	fmt.Println("--- Ladowanie programu z dewiacja ---")
-	fmt.Println()
+// ==================== LOAD / DEVIATION ====================
 
-	// List available .Program.polaris files in current directory
+func showLoadFileSelection() {
 	files, _ := filepath.Glob("*.Program.polaris")
-	if len(files) > 0 {
-		fmt.Println("Dostepne pliki:")
-		for i, f := range files {
-			fmt.Printf("  %d. %s\n", i+1, f)
+
+	if len(files) == 0 {
+		showError("Brak plikow .Program.polaris w biezacym katalogu")
+		return
+	}
+
+	list := tview.NewList()
+	for i, f := range files {
+		file := f // capture
+		shortcut := rune('a' + i)
+		if i > 25 {
+			shortcut = 0
 		}
-		fmt.Println()
+		list.AddItem(file, "", shortcut, func() {
+			showDeviationForm(file)
+		})
 	}
+	list.AddItem("Powrot", "Wroc do menu glownego", '0', func() {
+		pages.SwitchToPage("main")
+	})
 
-	inputFile := promptString("Podaj sciezke do pliku .Program.polaris", "")
-	if inputFile == "" {
-		fmt.Println("Blad: nie podano pliku.")
-		os.Exit(1)
+	list.SetBorder(true).
+		SetTitle(" Wybierz plik do zaladowania ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorYellow)
+
+	height := len(files)*2 + 6
+	if height > 30 {
+		height = 30
 	}
+	frame := centerWidget(list, 70, height)
+	pages.AddAndSwitchToPage("load", frame, true)
+}
 
-	// Check if user entered a number (selection from list)
-	if len(files) > 0 {
-		idx := 0
-		fmt.Sscanf(inputFile, "%d", &idx)
-		if idx >= 1 && idx <= len(files) {
-			inputFile = files[idx-1]
-		}
-	}
-
-	if !strings.HasSuffix(inputFile, ".Program.polaris") {
-		fmt.Println("Uwaga: plik nie ma rozszerzenia .Program.polaris")
-	}
-
-	// Read and display current dimensions
-	doc, err := ReadPolarisFile(inputFile)
+func showDeviationForm(filePath string) {
+	doc, err := ReadPolarisFile(filePath)
 	if err != nil {
-		fmt.Printf("Blad odczytu: %v\n", err)
-		os.Exit(1)
+		showError(fmt.Sprintf("Blad odczytu: %v", err))
+		return
 	}
 
 	if len(doc.Piece.Objects) == 0 {
-		fmt.Println("Blad: brak obiektow PieceObject w pliku.")
-		os.Exit(1)
+		showError("Brak obiektow PieceObject w pliku")
+		return
 	}
 
 	piece := doc.Piece.Objects[0]
@@ -168,37 +257,130 @@ func handleLoadDeviation() {
 		shapeType = "CONE"
 	}
 
-	fmt.Println()
-	fmt.Printf("  Typ ksztaltu:  %s\n", shapeType)
-	fmt.Printf("  Part:          %s\n", piece.Part)
-	fmt.Printf("  Aktualny Length: %.2f mm\n", piece.Attributes.Length)
-	fmt.Printf("  Aktualny Width:  %.2f mm\n", piece.Attributes.Width)
-	fmt.Printf("  Thickness:       %.2f mm\n", piece.Attributes.Thickness)
-	fmt.Println()
+	oldLength := float64(piece.Attributes.Length)
+	oldWidth := float64(piece.Attributes.Width)
+	thickness := float64(piece.Attributes.Thickness)
 
-	devLength := promptFloat("Deviation Length [mm] (np. -25 albo +10)", 0)
-	devWidth := promptFloat("Deviation Width [mm] (np. -30 albo +15)", 0)
+	// Info panel
+	info := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText(fmt.Sprintf(
+			"[white]Plik:      [yellow]%s\n"+
+				"[white]Typ:       [green]%s\n"+
+				"[white]Part:      [yellow]%s\n"+
+				"[white]Length:    [cyan]%.2f mm\n"+
+				"[white]Width:     [cyan]%.2f mm\n"+
+				"[white]Thickness: [cyan]%.2f mm",
+			filePath, shapeType, piece.Part, oldLength, oldWidth, thickness,
+		))
+	info.SetBorder(true).
+		SetTitle(" Informacje o programie ").
+		SetBorderColor(tcell.ColorDarkCyan)
 
-	if devLength == 0 && devWidth == 0 {
-		fmt.Println("Brak dewiacji - nie wprowadzono zmian.")
-		os.Exit(0)
+	// Deviation form
+	form := tview.NewForm()
+	form.AddInputField("Deviation Length [mm]", "0", 20, nil, nil)
+	form.AddInputField("Deviation Width [mm]", "0", 20, nil, nil)
+
+	form.AddButton("Zastosuj", func() {
+		devL, err1 := parseFloat(form, "Deviation Length [mm]")
+		devW, err2 := parseFloat(form, "Deviation Width [mm]")
+		if err1 != nil || err2 != nil {
+			showError("Nieprawidlowe wartosci dewiacji")
+			return
+		}
+		if devL == 0 && devW == 0 {
+			showError("Nie wprowadzono zadnej dewiacji")
+			return
+		}
+
+		newL := oldLength + devL
+		newW := oldWidth + devW
+		if newL <= 0 || newW <= 0 {
+			showError(fmt.Sprintf("Wymiary po dewiacji sa nieprawidlowe: L=%.2f, W=%.2f", newL, newW))
+			return
+		}
+
+		outputFile, err := ApplyDeviation(filePath, devL, devW)
+		if err != nil {
+			showError(fmt.Sprintf("Blad dewiacji: %v", err))
+			return
+		}
+
+		showSuccess(fmt.Sprintf(
+			"Dewiacja zastosowana!\n\n"+
+				"[white]Length: [cyan]%.2f[white] -> [green]%.2f[white] (zmiana: [yellow]%+.2f[white])\n"+
+				"[white]Width:  [cyan]%.2f[white] -> [green]%.2f[white] (zmiana: [yellow]%+.2f[white])\n\n"+
+				"[white]Plik: [yellow]%s",
+			oldLength, newL, devL, oldWidth, newW, devW, outputFile,
+		))
+	})
+	form.AddButton("Anuluj", func() {
+		showLoadFileSelection()
+	})
+
+	form.SetBorder(true).
+		SetTitle(" Dewiacja wymiarow ").
+		SetBorderColor(tcell.ColorYellow)
+
+	// Layout: info on top, form on bottom
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(info, 9, 0, false).
+		AddItem(form, 0, 1, true)
+
+	frame := centerWidget(flex, 65, 24)
+	pages.AddAndSwitchToPage("deviation", frame, true)
+}
+
+// ==================== DIALOGS ====================
+
+func showError(msg string) {
+	modal := tview.NewModal().
+		SetText("[red]BLAD\n\n[white]" + msg).
+		AddButtons([]string{"OK"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			pages.RemovePage("error")
+		}).
+		SetBackgroundColor(tcell.ColorDarkRed)
+
+	pages.AddAndSwitchToPage("error", modal, true)
+}
+
+func showSuccess(msg string) {
+	modal := tview.NewModal().
+		SetText("[green]SUKCES\n\n" + msg).
+		AddButtons([]string{"OK", "Menu glowne"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			pages.RemovePage("success")
+			if buttonLabel == "Menu glowne" {
+				pages.SwitchToPage("main")
+			}
+		}).
+		SetBackgroundColor(tcell.ColorDarkGreen)
+
+	pages.AddAndSwitchToPage("success", modal, true)
+}
+
+// ==================== HELPERS ====================
+
+func parseFloat(form *tview.Form, label string) (float64, error) {
+	text := form.GetFormItemByLabel(label).(*tview.InputField).GetText()
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0, fmt.Errorf("empty")
 	}
+	return strconv.ParseFloat(text, 64)
+}
 
-	newLength := float64(piece.Attributes.Length) + devLength
-	newWidth := float64(piece.Attributes.Width) + devWidth
-
-	fmt.Println()
-	fmt.Printf("  Nowy Length: %.2f mm (zmiana: %+.2f)\n", newLength, devLength)
-	fmt.Printf("  Nowy Width:  %.2f mm (zmiana: %+.2f)\n", newWidth, devWidth)
-
-	outputFile, err := ApplyDeviation(inputFile, devLength, devWidth)
-	if err != nil {
-		fmt.Printf("Blad dewiacji: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println()
-	fmt.Println("========================================")
-	fmt.Printf("  Program z dewiacja zapisany: %s\n", outputFile)
-	fmt.Println("========================================")
+func centerWidget(widget tview.Primitive, width, height int) tview.Primitive {
+	return tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(
+			tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(widget, height, 0, true).
+				AddItem(nil, 0, 1, false),
+			width, 0, true,
+		).
+		AddItem(nil, 0, 1, false)
 }
