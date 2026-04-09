@@ -32,13 +32,13 @@ func main() {
 
 func showMainMenu() {
 	list := tview.NewList().
-		AddItem("Stworz nowy program", "Utworz nowy program CAN lub CONE", '1', func() {
+		AddItem("Create new program", "Create a new CAN or CONE program", '1', func() {
 			showShapeSelection()
 		}).
-		AddItem("Zaladuj program (dewiacja)", "Zaladuj istniejacy program i zmien wymiary", '2', func() {
+		AddItem("Load program (deviation)", "Load an existing program and adjust dimensions", '2', func() {
 			showLoadFileSelection()
 		}).
-		AddItem("Wyjscie", "Zamknij program", '0', func() {
+		AddItem("Exit", "Close the application", '0', func() {
 			app.Stop()
 		})
 
@@ -55,18 +55,18 @@ func showMainMenu() {
 
 func showShapeSelection() {
 	list := tview.NewList().
-		AddItem("CAN", "Prosta plyta prostokatna", '1', func() {
+		AddItem("CAN", "Flat rectangular plate", '1', func() {
 			showCreateForm("CAN")
 		}).
-		AddItem("CONE", "Plyta w ksztalcie banana", '2', func() {
+		AddItem("CONE", "Banana-shaped plate", '2', func() {
 			showCreateForm("CONE")
 		}).
-		AddItem("Powrot", "Wroc do menu glownego", '0', func() {
+		AddItem("Back", "Return to main menu", '0', func() {
 			pages.SwitchToPage("main")
 		})
 
 	list.SetBorder(true).
-		SetTitle(" Wybierz typ ksztaltu ").
+		SetTitle(" Select shape type ").
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorGreen)
 
@@ -98,14 +98,14 @@ func showCreateForm(shapeType string) {
 		form.AddInputField("Top Radius [mm]", "", 20, nil, nil)
 	}
 
-	form.AddButton("Generuj", func() {
+	form.AddButton("Generate", func() {
 		handleCreate(form, shapeType)
 	})
-	form.AddButton("Anuluj", func() {
+	form.AddButton("Cancel", func() {
 		pages.SwitchToPage("shape")
 	})
 
-	title := fmt.Sprintf(" Nowy program %s ", shapeType)
+	title := fmt.Sprintf(" New %s program ", shapeType)
 	form.SetBorder(true).
 		SetTitle(title).
 		SetTitleAlign(tview.AlignCenter).
@@ -133,52 +133,52 @@ func handleCreate(form *tview.Form, shapeType string) {
 	var err error
 	params.Length, err = parseFloat(form, "Length [mm]")
 	if err != nil {
-		showError("Nieprawidlowa wartosc Length")
+		showError("Invalid Length value")
 		return
 	}
 	params.Width, err = parseFloat(form, "Width [mm]")
 	if err != nil {
-		showError("Nieprawidlowa wartosc Width")
+		showError("Invalid Width value")
 		return
 	}
 	params.Thickness, err = parseFloat(form, "Thickness [mm]")
 	if err != nil {
-		showError("Nieprawidlowa wartosc Thickness")
+		showError("Invalid Thickness value")
 		return
 	}
 
 	if params.Length <= 0 || params.Width <= 0 || params.Thickness <= 0 {
-		showError("Length, Width i Thickness musza byc > 0")
+		showError("Length, Width and Thickness must be > 0")
 		return
 	}
 	if params.Part == "" {
-		showError("Part nie moze byc pusty")
+		showError("Part cannot be empty")
 		return
 	}
 
 	if shapeType == "CONE" {
 		params.PieceHeight, err = parseFloat(form, "Piece Height [mm]")
 		if err != nil || params.PieceHeight <= 0 {
-			showError("Nieprawidlowa wartosc Piece Height")
+			showError("Invalid Piece Height value")
 			return
 		}
 		params.LeftOffset, err = parseFloat(form, "Left Offset [mm]")
 		if err != nil || params.LeftOffset < 0 {
-			showError("Nieprawidlowa wartosc Left Offset")
+			showError("Invalid Left Offset value")
 			return
 		}
 		params.BottomRadius, err = parseFloat(form, "Bottom Radius [mm]")
 		if err != nil || params.BottomRadius <= 0 {
-			showError("Nieprawidlowa wartosc Bottom Radius")
+			showError("Invalid Bottom Radius value")
 			return
 		}
 		params.TopRadius, err = parseFloat(form, "Top Radius [mm]")
 		if err != nil || params.TopRadius <= 0 {
-			showError("Nieprawidlowa wartosc Top Radius")
+			showError("Invalid Top Radius value")
 			return
 		}
 		if params.PieceHeight > params.Width {
-			showError("Piece Height nie moze byc wiekszy niz Width")
+			showError("Piece Height cannot be greater than Width")
 			return
 		}
 	}
@@ -193,11 +193,11 @@ func handleCreate(form *tview.Form, shapeType string) {
 	}
 
 	if err := WritePolarisFile(fileName, doc); err != nil {
-		showError(fmt.Sprintf("Blad zapisu: %v", err))
+		showError(fmt.Sprintf("Write error: %v", err))
 		return
 	}
 
-	showSuccess(fmt.Sprintf("Program zapisany:\n\n[yellow]%s", fileName))
+	showSuccess(fmt.Sprintf("Program saved:\n\n[yellow]%s", fileName))
 }
 
 // ==================== LOAD / DEVIATION ====================
@@ -206,7 +206,7 @@ func showLoadFileSelection() {
 	files, _ := filepath.Glob("*.Program.polaris")
 
 	if len(files) == 0 {
-		showError("Brak plikow .Program.polaris w biezacym katalogu")
+		showError("No .Program.polaris files found in current directory")
 		return
 	}
 
@@ -221,12 +221,12 @@ func showLoadFileSelection() {
 			showDeviationForm(file)
 		})
 	}
-	list.AddItem("Powrot", "Wroc do menu glownego", '0', func() {
+	list.AddItem("Back", "Return to main menu", '0', func() {
 		pages.SwitchToPage("main")
 	})
 
 	list.SetBorder(true).
-		SetTitle(" Wybierz plik do zaladowania ").
+		SetTitle(" Select file to load ").
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorYellow)
 
@@ -241,12 +241,12 @@ func showLoadFileSelection() {
 func showDeviationForm(filePath string) {
 	doc, err := ReadPolarisFile(filePath)
 	if err != nil {
-		showError(fmt.Sprintf("Blad odczytu: %v", err))
+		showError(fmt.Sprintf("Read error: %v", err))
 		return
 	}
 
 	if len(doc.Piece.Objects) == 0 {
-		showError("Brak obiektow PieceObject w pliku")
+		showError("No PieceObject found in file")
 		return
 	}
 
@@ -265,8 +265,8 @@ func showDeviationForm(filePath string) {
 	info := tview.NewTextView().
 		SetDynamicColors(true).
 		SetText(fmt.Sprintf(
-			"[white]Plik:      [yellow]%s\n"+
-				"[white]Typ:       [green]%s\n"+
+			"[white]File:      [yellow]%s\n"+
+				"[white]Type:      [green]%s\n"+
 				"[white]Part:      [yellow]%s\n"+
 				"[white]Length:    [cyan]%.2f mm\n"+
 				"[white]Width:     [cyan]%.2f mm\n"+
@@ -274,7 +274,7 @@ func showDeviationForm(filePath string) {
 			filePath, shapeType, piece.Part, oldLength, oldWidth, thickness,
 		))
 	info.SetBorder(true).
-		SetTitle(" Informacje o programie ").
+		SetTitle(" Program info ").
 		SetBorderColor(tcell.ColorDarkCyan)
 
 	// Deviation form
@@ -282,45 +282,45 @@ func showDeviationForm(filePath string) {
 	form.AddInputField("Deviation Length [mm]", "0", 20, nil, nil)
 	form.AddInputField("Deviation Width [mm]", "0", 20, nil, nil)
 
-	form.AddButton("Zastosuj", func() {
+	form.AddButton("Apply", func() {
 		devL, err1 := parseFloat(form, "Deviation Length [mm]")
 		devW, err2 := parseFloat(form, "Deviation Width [mm]")
 		if err1 != nil || err2 != nil {
-			showError("Nieprawidlowe wartosci dewiacji")
+			showError("Invalid deviation values")
 			return
 		}
 		if devL == 0 && devW == 0 {
-			showError("Nie wprowadzono zadnej dewiacji")
+			showError("No deviation entered")
 			return
 		}
 
 		newL := oldLength + devL
 		newW := oldWidth + devW
 		if newL <= 0 || newW <= 0 {
-			showError(fmt.Sprintf("Wymiary po dewiacji sa nieprawidlowe: L=%.2f, W=%.2f", newL, newW))
+			showError(fmt.Sprintf("Invalid dimensions after deviation: L=%.2f, W=%.2f", newL, newW))
 			return
 		}
 
 		outputFile, err := ApplyDeviation(filePath, devL, devW)
 		if err != nil {
-			showError(fmt.Sprintf("Blad dewiacji: %v", err))
+			showError(fmt.Sprintf("Deviation error: %v", err))
 			return
 		}
 
 		showSuccess(fmt.Sprintf(
-			"Dewiacja zastosowana!\n\n"+
-				"[white]Length: [cyan]%.2f[white] -> [green]%.2f[white] (zmiana: [yellow]%+.2f[white])\n"+
-				"[white]Width:  [cyan]%.2f[white] -> [green]%.2f[white] (zmiana: [yellow]%+.2f[white])\n\n"+
-				"[white]Plik: [yellow]%s",
+			"Deviation applied!\n\n"+
+				"[white]Length: [cyan]%.2f[white] -> [green]%.2f[white] (change: [yellow]%+.2f[white])\n"+
+				"[white]Width:  [cyan]%.2f[white] -> [green]%.2f[white] (change: [yellow]%+.2f[white])\n\n"+
+				"[white]File: [yellow]%s",
 			oldLength, newL, devL, oldWidth, newW, devW, outputFile,
 		))
 	})
-	form.AddButton("Anuluj", func() {
+	form.AddButton("Cancel", func() {
 		showLoadFileSelection()
 	})
 
 	form.SetBorder(true).
-		SetTitle(" Dewiacja wymiarow ").
+		SetTitle(" Dimension deviation ").
 		SetBorderColor(tcell.ColorYellow)
 
 	// Layout: info on top, form on bottom
@@ -336,7 +336,7 @@ func showDeviationForm(filePath string) {
 
 func showError(msg string) {
 	modal := tview.NewModal().
-		SetText("[red]BLAD\n\n[white]" + msg).
+		SetText("[red]ERROR\n\n[white]" + msg).
 		AddButtons([]string{"OK"}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			pages.RemovePage("error")
@@ -348,11 +348,11 @@ func showError(msg string) {
 
 func showSuccess(msg string) {
 	modal := tview.NewModal().
-		SetText("[green]SUKCES\n\n" + msg).
-		AddButtons([]string{"OK", "Menu glowne"}).
+		SetText("[green]SUCCESS\n\n" + msg).
+		AddButtons([]string{"OK", "Main menu"}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			pages.RemovePage("success")
-			if buttonLabel == "Menu glowne" {
+			if buttonLabel == "Main menu" {
 				pages.SwitchToPage("main")
 			}
 		}).
