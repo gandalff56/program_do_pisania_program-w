@@ -38,6 +38,9 @@ func showMainMenu() {
 		AddItem("Load program (deviation)", "Load an existing program and adjust dimensions", '2', func() {
 			showLoadFileSelection()
 		}).
+		AddItem("Add J-BEVEL to program", "Load a program and create a J-BEVEL variant", '3', func() {
+			showJBevelFileSelection()
+		}).
 		AddItem("Exit", "Close the application", '0', func() {
 			app.Stop()
 		})
@@ -47,7 +50,7 @@ func showMainMenu() {
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorDodgerBlue)
 
-	frame := centerWidget(list, 60, 11)
+	frame := centerWidget(list, 60, 13)
 	pages.AddAndSwitchToPage("main", frame, true)
 }
 
@@ -330,6 +333,147 @@ func showDeviationForm(filePath string) {
 
 	frame := centerWidget(flex, 65, 24)
 	pages.AddAndSwitchToPage("deviation", frame, true)
+}
+
+// ==================== J-BEVEL ====================
+
+func showJBevelFileSelection() {
+	files, _ := filepath.Glob("*.Program.polaris")
+
+	if len(files) == 0 {
+		showError("No .Program.polaris files found in current directory")
+		return
+	}
+
+	list := tview.NewList()
+	for i, f := range files {
+		file := f
+		shortcut := rune('a' + i)
+		if i > 25 {
+			shortcut = 0
+		}
+		list.AddItem(file, "", shortcut, func() {
+			showJBevelForm(file)
+		})
+	}
+	list.AddItem("Back", "Return to main menu", '0', func() {
+		pages.SwitchToPage("main")
+	})
+
+	list.SetBorder(true).
+		SetTitle(" Select program for J-BEVEL ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorOrange)
+
+	height := len(files)*2 + 6
+	if height > 30 {
+		height = 30
+	}
+	frame := centerWidget(list, 70, height)
+	pages.AddAndSwitchToPage("jbevel-load", frame, true)
+}
+
+func showJBevelForm(filePath string) {
+	doc, err := ReadPolarisFile(filePath)
+	if err != nil {
+		showError(fmt.Sprintf("Read error: %v", err))
+		return
+	}
+
+	if len(doc.Piece.Objects) == 0 || len(doc.Program.Objects) == 0 {
+		showError("Invalid program file")
+		return
+	}
+
+	piece := doc.Piece.Objects[0]
+	isCone := detectCone(piece.Operations)
+	shapeType := "CAN"
+	if isCone {
+		shapeType = "CONE"
+	}
+
+	oldLength := float64(piece.Attributes.Length)
+	oldWidth := float64(piece.Attributes.Width)
+	oldThickness := float64(piece.Attributes.Thickness)
+
+	// Info panel
+	info := tview.NewTextView().
+		SetDynamicColors(true).
+		SetText(fmt.Sprintf(
+			"[white]File:      [yellow]%s\n"+
+				"[white]Type:      [green]%s\n"+
+				"[white]Part:      [yellow]%s\n"+
+				"[white]Length:    [cyan]%.2f mm\n"+
+				"[white]Width:     [cyan]%.2f mm\n"+
+				"[white]Thickness: [cyan]%.2f mm",
+			filePath, shapeType, piece.Part, oldLength, oldWidth, oldThickness,
+		))
+	info.SetBorder(true).
+		SetTitle(" Source program ").
+		SetBorderColor(tcell.ColorDarkCyan)
+
+	// J-BEVEL form
+	form := tview.NewForm()
+	form.AddInputField("J-BEVEL number", "2", 10, nil, nil)
+	form.AddInputField("New Length [mm]", fmt.Sprintf("%g", oldLength), 20, nil, nil)
+	form.AddInputField("New Width [mm]", fmt.Sprintf("%g", oldWidth), 20, nil, nil)
+	form.AddInputField("New Thickness [mm]", fmt.Sprintf("%g", oldThickness), 20, nil, nil)
+	form.AddInputField("Working Area", "AB", 10, nil, nil)
+
+	form.AddButton("Generate J-BEVEL", func() {
+		handleJBevel(form, filePath, doc)
+	})
+	form.AddButton("Cancel", func() {
+		showJBevelFileSelection()
+	})
+
+	form.SetBorder(true).
+		SetTitle(" J-BEVEL configuration ").
+		SetBorderColor(tcell.ColorOrange)
+
+	flex := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(info, 9, 0, false).
+		AddItem(form, 0, 1, true)
+
+	frame := centerWidget(flex, 65, 30)
+	pages.AddAndSwitchToPage("jbevel-form", frame, true)
+}
+
+func handleJBevel(form *tview.Form, sourcePath string, doc *PolarisDocument) {
+	bevelNum := form.GetFormItemByLabel("J-BEVEL number").(*tview.InputField).GetText()
+	workingArea := form.GetFormItemByLabel("Working Area").(*tview.InputField).GetText()
+
+	newLength, err := parseFloat(form, "New Length [mm]")
+	if err != nil || newLength <= 0 {
+		showError("Invalid Length value")
+		return
+	}
+	newWidth, err := parseFloat(form, "New Width [mm]")
+	if err != nil || newWidth <= 0 {
+		showError("Invalid Width value")
+		return
+	}
+	newThickness, err := parseFloat(form, "New Thickness [mm]")
+	if err != nil || newThickness <= 0 {
+		showError("Invalid Thickness value")
+		return
+	}
+
+	outputFile, err := ApplyJBevel(doc, bevelNum, newLength, newWidth, newThickness, workingArea)
+	if err != nil {
+		showError(fmt.Sprintf("J-BEVEL error: %v", err))
+		return
+	}
+
+	showSuccess(fmt.Sprintf(
+		"J-BEVEL program created!\n\n"+
+			"[white]Part: [yellow]%s\n"+
+			"[white]Length: [cyan]%.2f mm\n"+
+			"[white]Width:  [cyan]%.2f mm\n"+
+			"[white]Thickness: [cyan]%.2f mm\n\n"+
+			"[white]File: [yellow]%s",
+		doc.Piece.Objects[0].Part, newLength, newWidth, newThickness, outputFile,
+	))
 }
 
 // ==================== DIALOGS ====================
