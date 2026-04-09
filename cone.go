@@ -6,6 +6,73 @@ import (
 	"math"
 )
 
+// ConeCalcResult holds the computed CONE geometry from arc lengths
+type ConeCalcResult struct {
+	Length       float64 // total bounding length (top chord)
+	BoundingWidth float64 // bounding box height
+	PieceHeight  float64 // Y-distance between arc endpoints
+	LeftOffset   float64 // X-offset of bottom arc start
+	BottomRadius float64 // bottom arc radius
+	TopRadius    float64 // top arc radius
+}
+
+// CalculateConeFromArcs computes all CONE parameters from technical drawing dimensions:
+//   x1 = top arc length (longer, outer)
+//   x2 = bottom arc length (shorter, inner)
+//   w  = side edge length (slant height)
+func CalculateConeFromArcs(x1, x2, w float64) (*ConeCalcResult, error) {
+	if x1 <= x2 {
+		return nil, fmt.Errorf("x1 (top arc = %.2f) must be > x2 (bottom arc = %.2f)", x1, x2)
+	}
+	if w <= 0 {
+		return nil, fmt.Errorf("w (side edge) must be > 0")
+	}
+
+	// θ = development angle (radians)
+	theta := (x1 - x2) / w
+	if theta <= 0 || theta >= 2*math.Pi {
+		return nil, fmt.Errorf("invalid geometry: computed angle = %.4f rad", theta)
+	}
+
+	// Arc radii (development radii)
+	rBottom := x2 / theta
+	rTop := x1 / theta
+
+	// Chord lengths (straight-line distances)
+	halfTheta := theta / 2.0
+	sinHalf := math.Sin(halfTheta)
+	chordBottom := 2.0 * rBottom * sinHalf
+	chordTop := 2.0 * rTop * sinHalf
+
+	// Left/right offset (symmetric)
+	leftOffset := (chordTop - chordBottom) / 2.0
+
+	// Piece height (Y-component of side edge)
+	// Side edge = hypotenuse, leftOffset = X-component
+	slantSq := w * w
+	offsetSq := leftOffset * leftOffset
+	if offsetSq >= slantSq {
+		return nil, fmt.Errorf("invalid geometry: offset (%.2f) >= slant width (%.2f)", leftOffset, w)
+	}
+	pieceHeight := math.Sqrt(slantSq - offsetSq)
+
+	// Top arc sagitta (how far the top arc extends above pieceHeight)
+	halfChordTop := chordTop / 2.0
+	topSagitta := rTop - math.Sqrt(rTop*rTop-halfChordTop*halfChordTop)
+
+	// Bounding box width = pieceHeight + top sagitta
+	boundingWidth := pieceHeight + topSagitta
+
+	return &ConeCalcResult{
+		Length:       chordTop,
+		BoundingWidth: boundingWidth,
+		PieceHeight:  pieceHeight,
+		LeftOffset:   leftOffset,
+		BottomRadius: rBottom,
+		TopRadius:    rTop,
+	}, nil
+}
+
 // GenerateCONE creates a PolarisDocument for a CONE (banana-shaped plate)
 func GenerateCONE(p ShapeParams) (*PolarisDocument, string) {
 	length := p.Length

@@ -61,8 +61,11 @@ func showShapeSelection() {
 		AddItem("CAN", "Flat rectangular plate", '1', func() {
 			showCreateForm("CAN")
 		}).
-		AddItem("CONE", "Banana-shaped plate", '2', func() {
+		AddItem("CONE (manual)", "Banana-shaped plate - enter all parameters", '2', func() {
 			showCreateForm("CONE")
+		}).
+		AddItem("CONE (auto-calc)", "Banana-shaped plate - calculate from x1, x2, w", '3', func() {
+			showConeAutoCalcForm()
 		}).
 		AddItem("Back", "Return to main menu", '0', func() {
 			pages.SwitchToPage("main")
@@ -73,7 +76,7 @@ func showShapeSelection() {
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorGreen)
 
-	frame := centerWidget(list, 50, 11)
+	frame := centerWidget(list, 60, 13)
 	pages.AddAndSwitchToPage("shape", frame, true)
 }
 
@@ -201,6 +204,126 @@ func handleCreate(form *tview.Form, shapeType string) {
 	}
 
 	showSuccess(fmt.Sprintf("Program saved:\n\n[yellow]%s", fileName))
+}
+
+// ==================== CONE AUTO-CALC ====================
+
+func showConeAutoCalcForm() {
+	form := tview.NewForm()
+
+	// Drawing dimensions
+	form.AddInputField("x1 - top arc length [mm]", "", 20, nil, nil)
+	form.AddInputField("x2 - bottom arc length [mm]", "", 20, nil, nil)
+	form.AddInputField("w - side edge length [mm]", "", 20, nil, nil)
+
+	// Common fields
+	form.AddInputField("Thickness [mm]", "80.0", 20, nil, nil)
+	form.AddInputField("Contract", "B2149", 30, nil, nil)
+	form.AddInputField("Project", "B2149", 30, nil, nil)
+	form.AddInputField("Drawing", "MONOPILE_PARTS_A", 30, nil, nil)
+	form.AddInputField("Part", "", 30, nil, nil)
+	form.AddInputField("Material Code", "S355ML", 20, nil, nil)
+	form.AddInputField("Working Area", "A", 10, nil, nil)
+
+	form.AddButton("Calculate & Generate", func() {
+		handleConeAutoCalc(form)
+	})
+	form.AddButton("Cancel", func() {
+		pages.SwitchToPage("shape")
+	})
+
+	form.SetBorder(true).
+		SetTitle(" New CONE program (auto-calculate from x1, x2, w) ").
+		SetTitleAlign(tview.AlignCenter).
+		SetBorderColor(tcell.ColorGreen)
+
+	frame := centerWidget(form, 70, 30)
+	pages.AddAndSwitchToPage("cone-auto", frame, true)
+}
+
+func handleConeAutoCalc(form *tview.Form) {
+	x1, err := parseFloat(form, "x1 - top arc length [mm]")
+	if err != nil || x1 <= 0 {
+		showError("Invalid x1 (top arc length)")
+		return
+	}
+	x2, err := parseFloat(form, "x2 - bottom arc length [mm]")
+	if err != nil || x2 <= 0 {
+		showError("Invalid x2 (bottom arc length)")
+		return
+	}
+	w, err := parseFloat(form, "w - side edge length [mm]")
+	if err != nil || w <= 0 {
+		showError("Invalid w (side edge length)")
+		return
+	}
+	thickness, err := parseFloat(form, "Thickness [mm]")
+	if err != nil || thickness <= 0 {
+		showError("Invalid Thickness")
+		return
+	}
+
+	if x1 <= x2 {
+		showError("x1 (top arc) must be longer than x2 (bottom arc)")
+		return
+	}
+
+	// Calculate CONE geometry from arc lengths
+	calc, err := CalculateConeFromArcs(x1, x2, w)
+	if err != nil {
+		showError(fmt.Sprintf("Calculation error: %v", err))
+		return
+	}
+
+	contract := form.GetFormItemByLabel("Contract").(*tview.InputField).GetText()
+	project := form.GetFormItemByLabel("Project").(*tview.InputField).GetText()
+	drawing := form.GetFormItemByLabel("Drawing").(*tview.InputField).GetText()
+	part := form.GetFormItemByLabel("Part").(*tview.InputField).GetText()
+	materialCode := form.GetFormItemByLabel("Material Code").(*tview.InputField).GetText()
+	workingArea := form.GetFormItemByLabel("Working Area").(*tview.InputField).GetText()
+
+	if part == "" {
+		showError("Part cannot be empty")
+		return
+	}
+
+	params := ShapeParams{
+		ShapeType:    "CONE",
+		Contract:     contract,
+		Project:      project,
+		Drawing:      drawing,
+		Part:         part,
+		Length:       calc.Length,
+		Width:        calc.BoundingWidth,
+		Thickness:    thickness,
+		MaterialCode: materialCode,
+		WorkingArea:  workingArea,
+		PieceHeight:  calc.PieceHeight,
+		LeftOffset:   calc.LeftOffset,
+		BottomRadius: calc.BottomRadius,
+		TopRadius:    calc.TopRadius,
+	}
+
+	doc, fileName := GenerateCONE(params)
+
+	if err := WritePolarisFile(fileName, doc); err != nil {
+		showError(fmt.Sprintf("Write error: %v", err))
+		return
+	}
+
+	showSuccess(fmt.Sprintf(
+		"CONE program created (auto-calculated)!\n\n"+
+			"[white]Calculated values:\n"+
+			"[white]  Length:       [cyan]%.2f mm\n"+
+			"[white]  Width:        [cyan]%.2f mm\n"+
+			"[white]  PieceHeight:  [cyan]%.2f mm\n"+
+			"[white]  LeftOffset:   [cyan]%.2f mm\n"+
+			"[white]  BottomRadius: [cyan]%.2f mm\n"+
+			"[white]  TopRadius:    [cyan]%.2f mm\n\n"+
+			"[white]File: [yellow]%s",
+		calc.Length, calc.BoundingWidth, calc.PieceHeight,
+		calc.LeftOffset, calc.BottomRadius, calc.TopRadius, fileName,
+	))
 }
 
 // ==================== LOAD / DEVIATION ====================
