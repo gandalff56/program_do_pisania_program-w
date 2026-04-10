@@ -64,12 +64,12 @@ func CalculateConeFromArcs(x1, x2, w float64) (*ConeCalcResult, error) {
 	boundingWidth := pieceHeight + topSagitta
 
 	return &ConeCalcResult{
-		Length:       chordTop,
-		BoundingWidth: boundingWidth,
-		PieceHeight:  pieceHeight,
-		LeftOffset:   leftOffset,
-		BottomRadius: rBottom,
-		TopRadius:    rTop,
+		Length:        roundTo2(chordTop),
+		BoundingWidth: roundTo2(boundingWidth),
+		PieceHeight:   roundTo2(pieceHeight),
+		LeftOffset:    roundTo2(leftOffset),
+		BottomRadius:  roundTo2(rBottom),
+		TopRadius:     roundTo2(rTop),
 	}, nil
 }
 
@@ -124,7 +124,7 @@ func GenerateCONE(p ShapeParams) (*PolarisDocument, string) {
 	program := ProgramObject{
 		Name:        programName,
 		ProgramType: "PieceToMeasure",
-		SVGEntity:   `{"error":"unknown profile type" }`,
+		SVGEntity:   svgEntity,
 		Stock:       nil,
 		Attributes:  progAttrs,
 		RelatedPieces: []RelatedPiece{
@@ -335,5 +335,10 @@ func autoCalcBoundingWidth(pieceHeight, chordTop, topRadius float64) float64 {
 		return pieceHeight
 	}
 	topSagitta := topRadius - math.Sqrt(topRadius*topRadius-halfChord*halfChord)
-	return pieceHeight + topSagitta
+	return roundTo2(pieceHeight + topSagitta)
+}
+
+// roundTo2 rounds a float64 to 2 decimal places
+func roundTo2(v float64) float64 {
+	return math.Round(v*100) / 100
 }
