@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -16,6 +18,11 @@ var (
 )
 
 func main() {
+	// Fix double-input issue on some Windows terminals
+	if runtime.GOOS == "windows" {
+		os.Setenv("TCELL_CONSOLE", "true")
+	}
+
 	app = tview.NewApplication()
 	pages = tview.NewPages()
 
