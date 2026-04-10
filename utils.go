@@ -67,7 +67,7 @@ func promptFloatAllowZero(prompt string) float64 {
 // calculateGrossWeight computes weight from bounding rectangle dimensions
 // dimensions in mm, specificWeight in g/cm3, result in kg
 func calculateGrossWeight(length, width, thickness, specificWeight float64) float64 {
-	return length * width * thickness * specificWeight / 1e6
+	return roundTo2(length * width * thickness * specificWeight / 1e6)
 }
 
 func marshalNodeAttrs(name string, seqIndex int, orderType string, customType int) json.RawMessage {

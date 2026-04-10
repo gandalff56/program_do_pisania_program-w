@@ -314,7 +314,7 @@ func calculateConeNetWeight(length, pieceHeight, leftOffset, rightOffset, bottom
 
 	netArea := trapArea - bottomSegArea + topSegArea
 
-	return netArea * thickness * specificWeight / 1e6
+	return roundTo2(netArea * thickness * specificWeight / 1e6)
 }
 
 func circularSegmentArea(chord, radius float64) float64 {
