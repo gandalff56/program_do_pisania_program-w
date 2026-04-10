@@ -71,7 +71,7 @@ func showShapeSelection() {
 		AddItem("CONE (manual)", "Banana-shaped plate - enter all parameters", '2', func() {
 			showCreateForm("CONE")
 		}).
-		AddItem("CONE (auto-calc)", "Banana-shaped plate - calculate from x1, x2, w", '3', func() {
+		AddItem("CONE (auto-calc)", "Banana-shaped plate - calculate from Chord1, Chord2, W", '3', func() {
 			showConeAutoCalcForm()
 		}).
 		AddItem("Back", "Return to main menu", '0', func() {
@@ -238,10 +238,10 @@ func handleCreate(form *tview.Form, shapeType string) {
 func showConeAutoCalcForm() {
 	form := tview.NewForm()
 
-	// Drawing dimensions
-	form.AddInputField("x1 - top arc length [mm]", "", 20, nil, nil)
-	form.AddInputField("x2 - bottom arc length [mm]", "", 20, nil, nil)
-	form.AddInputField("w - side edge length [mm]", "", 20, nil, nil)
+	// Drawing dimensions (from technical drawing)
+	form.AddInputField("Chord 1 - top [mm]", "", 20, nil, nil)
+	form.AddInputField("Chord 2 - bottom [mm]", "", 20, nil, nil)
+	form.AddInputField("Chord W - side edge [mm]", "", 20, nil, nil)
 
 	// Common fields
 	form.AddInputField("Thickness [mm]", "80.0", 20, nil, nil)
@@ -260,7 +260,7 @@ func showConeAutoCalcForm() {
 	})
 
 	form.SetBorder(true).
-		SetTitle(" New CONE program (auto-calculate from x1, x2, w) ").
+		SetTitle(" New CONE program (auto-calculate from Chord1, Chord2, W) ").
 		SetTitleAlign(tview.AlignCenter).
 		SetBorderColor(tcell.ColorGreen)
 
@@ -269,19 +269,19 @@ func showConeAutoCalcForm() {
 }
 
 func handleConeAutoCalc(form *tview.Form) {
-	x1, err := parseFloat(form, "x1 - top arc length [mm]")
-	if err != nil || x1 <= 0 {
-		showError("Invalid x1 (top arc length)")
+	chord1, err := parseFloat(form, "Chord 1 - top [mm]")
+	if err != nil || chord1 <= 0 {
+		showError("Invalid Chord 1 (top chord)")
 		return
 	}
-	x2, err := parseFloat(form, "x2 - bottom arc length [mm]")
-	if err != nil || x2 <= 0 {
-		showError("Invalid x2 (bottom arc length)")
+	chord2, err := parseFloat(form, "Chord 2 - bottom [mm]")
+	if err != nil || chord2 <= 0 {
+		showError("Invalid Chord 2 (bottom chord)")
 		return
 	}
-	w, err := parseFloat(form, "w - side edge length [mm]")
+	w, err := parseFloat(form, "Chord W - side edge [mm]")
 	if err != nil || w <= 0 {
-		showError("Invalid w (side edge length)")
+		showError("Invalid Chord W (side edge)")
 		return
 	}
 	thickness, err := parseFloat(form, "Thickness [mm]")
@@ -290,13 +290,13 @@ func handleConeAutoCalc(form *tview.Form) {
 		return
 	}
 
-	if x1 <= x2 {
-		showError("x1 (top arc) must be longer than x2 (bottom arc)")
+	if chord1 <= chord2 {
+		showError("Chord 1 (top) must be longer than Chord 2 (bottom)")
 		return
 	}
 
-	// Calculate CONE geometry from arc lengths
-	calc, err := CalculateConeFromArcs(x1, x2, w)
+	// Calculate CONE geometry from chord lengths
+	calc, err := CalculateConeFromChords(chord1, chord2, w)
 	if err != nil {
 		showError(fmt.Sprintf("Calculation error: %v", err))
 		return
