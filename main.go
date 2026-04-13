@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,19 +17,32 @@ var (
 )
 
 func main() {
-	// Fix double-input issue on some Windows terminals
-	if runtime.GOOS == "windows" {
-		os.Setenv("TCELL_CONSOLE", "true")
-	}
-
 	app = tview.NewApplication()
 	pages = tview.NewPages()
+
+	// Fix double-input issue on Windows (ConPTY ghost events)
+	var (
+		lastKey     tcell.Key
+		lastRune    rune
+		lastKeyTime time.Time
+	)
+	app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		now := time.Now()
+		if event.Key() == lastKey && event.Rune() == lastRune &&
+			now.Sub(lastKeyTime) < 40*time.Millisecond {
+			return nil
+		}
+		lastKey = event.Key()
+		lastRune = event.Rune()
+		lastKeyTime = now
+		return event
+	})
 
 	showMainMenu()
 
 	pages.SetBackgroundColor(tcell.ColorDefault)
 
-	if err := app.SetRoot(pages, true).EnableMouse(true).Run(); err != nil {
+	if err := app.SetRoot(pages, true).Run(); err != nil {
 		fmt.Printf("Error: %v\n", err)
 	}
 }
